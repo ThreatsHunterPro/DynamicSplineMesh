@@ -61,12 +61,6 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 	#pragma region Lag
 
 	/*
-	 * Status of the anti-lag
-	 */
-	UPROPERTY(EditAnywhere, Category = "Spline | Lag")
-		bool useAntiLag = true;
-
-	/*
 	 * Rate used to space checks
 	 * It works only when anti-lag is activated
 	 */

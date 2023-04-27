@@ -22,23 +22,13 @@ void ADynamicSplineMeshActor::OnConstruction(const FTransform& Transform)
 	// Show on screen the current version of this tool
 	GEngine->AddOnScreenDebugMessage(0, 5.0f, FColor::Blue, *version.ToString());
 
-	// If the anti-lag is activated
-	if (useAntiLag)
-	{
-		FTimerManager& _timerManager = GetWorld()->GetTimerManager();
+	FTimerManager& _timerManager = GetWorld()->GetTimerManager();
 
-		// Check if the check timer is already active
-		if (!_timerManager.IsTimerActive(updateTimer))
-		{
-			// If not, start it
-			_timerManager.SetTimer(updateTimer, this, &ADynamicSplineMeshActor::CheckForUpdate, updateTimerRate);
-		}
-	}
-
-	// Otherwise, update directly the spline
-	else
+	// Check if the check timer is already active
+	if (!_timerManager.IsTimerActive(updateTimer))
 	{
-		UpdateSpline();
+		// If not, start it
+		_timerManager.SetTimer(updateTimer, this, &ADynamicSplineMeshActor::CheckForUpdate, updateTimerRate);
 	}
 }
 
