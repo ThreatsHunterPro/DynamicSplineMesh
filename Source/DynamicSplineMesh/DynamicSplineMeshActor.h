@@ -1,7 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 
-#pragma region Includes
+#pragma region Custom includes
 
 #pragma region Components
 
@@ -40,8 +40,6 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 {
 	GENERATED_BODY()
 
-	#pragma region DefaultMode
-
 	#pragma region Spline
 
 	/* Version of this tool */
@@ -64,7 +62,7 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 	 * Rate used to space checks
 	 * It works only when anti-lag is activated
 	 */
-	UPROPERTY(EditAnywhere, Category = "Spline | Lag", meta = (ClampMin = "0.01", ClampMax = "10.0", EditCondition = "useAntiLag", EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Lag", meta = (ClampMin = "0.01", ClampMax = "10.0"))
 		float updateTimerRate = 1.0f;
 
 	/*
@@ -86,10 +84,18 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 
 	#pragma region Composition
 
-	/* TODO TEST */
+	/*
+	 * The lenght of the spline
+	 * Updated automatically after the spline update
+	 * Modifiable to set the new spline lenght
+	 */
 	UPROPERTY(EditAnywhere, Category = "Spline | Composition")
 		float lenght = 100.0f;
 
+	/* The spline point type */
+	UPROPERTY(EditAnywhere, Category = "Spline | Composition")
+		TEnumAsByte<ESplinePointType::Type> splinePointType = TEnumAsByte<ESplinePointType::Type>();
+	
 	/* The composition method of the spline */
 	UPROPERTY(EditAnywhere, Category = "Spline | Composition")
 		TEnumAsByte<ECompositionMethod> compositionMethod = TEnumAsByte<ECompositionMethod>();
@@ -124,7 +130,7 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 		float gap = 0.0f;
 
 	/* The array of the meshes currently set on the spline */
-	UPROPERTY(VisibleAnywhere, Category = "Spline | Placement")
+	UPROPERTY(/*VisibleAnywhere, Category = "Spline | Placement"*/)
 		TArray<USplineMeshComponent*> splineMeshes = TArray<USplineMeshComponent*>();
 
 	#pragma endregion
@@ -155,37 +161,55 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 
 	#pragma region CheckGround
 
+	/* The condition to snap the spline on the ground */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground")
 		bool snapOnGround = true;
-	
+
+	/* Vertical offset to start the ground check */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "-1000.0", ClampMax = "1000.0", EditCondition = snapOnGround, EditConditionHides))
 		float zGroundCheckOffset = 0.0f;
-
+	
+	/* Depth of the ground check */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "0.0", ClampMax = "1000.0", EditCondition = snapOnGround, EditConditionHides))
 		float checkGroundDepth = 200.0f;
-
+	
+	/* Ground layer used for the ground check */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (EditCondition = snapOnGround, EditConditionHides))
 		TArray<TEnumAsByte<EObjectTypeQuery>> groundLayer = TArray<TEnumAsByte<EObjectTypeQuery>>();
-
+	
+	/* Ground check method */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (EditCondition = snapOnGround, EditConditionHides))
 		TEnumAsByte<ECheckGroundMethod> checkGroundMethod = TEnumAsByte<ECheckGroundMethod>();
-
+	
+	/*
+	 * Number of check on the spline
+	 * Usable only in the 'Points' check ground method
+	 */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "0", ClampMax = "1000", EditCondition = "snapOnGround && checkGroundMethod == ECheckGroundMethod::POINTS", EditConditionHides))
 		int checkGroundPointsCount = 10;
 	
+	/*
+	 * Gap between the ground checks
+	 * Usable only in the 'SPACING' check ground method
+	 */
 	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "1.0", ClampMax = "10000.0", EditCondition = "snapOnGround && checkGroundMethod == ECheckGroundMethod::SPACING", EditConditionHides))
 		float checkGroundSpacing = 500.0f;
-
-	UPROPERTY()
-		TArray<FVector> raycasts = TArray<FVector>();
-
-	UPROPERTY()
-		TArray<int> splinePoints = TArray<int>();
-	
-	#pragma endregion
 	
 	#pragma endregion
 
+	#pragma region Bridge
+
+	UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
+		bool isBridge = false;
+
+	UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
+		bool reverseTension = false;
+	
+	UPROPERTY(EditAnywhere, Category = "Spline | Bridge", meta = (ClampMin = "-1000.0", ClampMax = "1000.0"))
+		float tension = 0.0f;
+
+	#pragma endregion
+	
 	/* #pragma region BridgeMode
 	//
 	// UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
@@ -215,44 +239,71 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 	//
 	// #pragma endregion */
 	
-public:
-	/* 
- 	 * If the anti-lag is used, it checks if this actor has moved
-	 * If this isn't the case, it updates the spline
-	 */
-	UFUNCTION() void CheckForUpdate()
-	{
-		// Check if this actor has moved
-		const FTransform& _transform = GetTransform();
-		const bool _isStatic = previousTransform.Equals(_transform);
-
-		// Register the new transform
-		previousTransform = _transform;
-
-		// If not, update the spline
-		if (_isStatic)
-		{
-			UpdateSpline();
-		}
-	}
+public:	
+	ADynamicSplineMeshActor();
 	
+private:
+	#if WITH_EDITOR
+
+	virtual void OnConstruction(const FTransform& Transform) override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+
+	#endif
+	
+	#pragma region Init
+
+	/* Reset the spline as default */
+	UFUNCTION(CallInEditor, Category = "Spline => Editor") void ResetSpline();
+
+	/* Define a new spline lenght */
+	void SetSplineLenght(const float _lenght);
+
 	/*
-	 *  Reset meshRotation values
-	 *  Called when the rotation has changed
+	 * Flush all debugs in the world
+	 * Called when the editor button is pressed
 	 */
-	FORCEINLINE void ResetMeshRotationValues()
+	UFUNCTION(CallInEditor, Category = "Spline => Editor") FORCEINLINE void FlushDebug() const
 	{
-		meshRotation.axisRotation = ROTATE_X;
-		meshRotation.angle = 0.0f;
-		ResetMeshesRotation();
+		FlushPersistentDebugLines(GetWorld());
 	}
 
-	/* */
-	FORCEINLINE int GetPlacementCount() const
-	{
-		const int _placementWithSpacingCount = FMath::CeilToInt(spline->GetSplineLength() / checkGroundSpacing);
-		return checkGroundMethod == POINTS ? checkGroundPointsCount : _placementWithSpacingCount;
-	}
+	#pragma endregion
+
+	#pragma region Update
+
+	/* Flush and reset the spline meshes with the different methods */
+	UFUNCTION(CallInEditor, Category = "Spline => Editor") void UpdateSpline();
+
+	/* Destroy all SplineMeshComponent */
+	void FlushSpline();
+
+	#pragma endregion
+
+	#pragma region Composition
+
+	/* Applies a duplication method to compose the spline */
+	void DuplicateMesh();
+
+	/* Applies a extend method to compose the spline */
+	void ExtendMesh();
+
+	/* Get a random mesh to compose the spline */
+	FMeshComposition GetRandomMeshComposition() const;
+
+	/* Randomize the meshes of the spline */
+	UFUNCTION(CallInEditor, Category = "Spline => Editor", meta = (EditCondition = "composition == EComposition::RANDOM", EditConditionHides)) void RandomizeSpline();
+
+	#pragma endregion
+
+	#pragma region Placement
+
+	/* Add a new mesh to the spline */
+	void AddSplineMesh(const FMeshComposition& _meshComposition, const FSplineMeshValues& _values, const int _index);
+
+	/* Rotate a specific mesh on the spline */
+	void RotateSplineMesh(USplineMeshComponent* _splineMesh, const FSplineMeshValues& _values, const unsigned int _index) const;
+
+	/* Get mesh rotation vector */
 	FORCEINLINE FVector GetRotatedVector(const FMeshRotation& _meshRotation) const
 	{
 		const float _angle = FMath::DegreesToRadians(_meshRotation.angle);
@@ -271,75 +322,28 @@ public:
 			return FVector(0.0f);
 		}
 	}
+
+	/* Get mesh rotation at a specific index */
 	FORCEINLINE FMeshRotation GetMeshRotation(const int _index) const
 	{
 		return rotationMethod != REGULAR && _index < meshesRotation.Num() ? meshesRotation[_index] : meshRotation;
 	}
-	UFUNCTION(CallInEditor, Category = "Spline => Editor") FORCEINLINE void ResetSplineLenght()
-	{
-		SetSplineLenght();
-		UpdateSpline();
-	}
-	UFUNCTION(CallInEditor, Category = "Spline => Editor") FORCEINLINE void FlushDebug() const
-	{
-		FlushPersistentDebugLines(GetWorld());
-	}
-	
-public:	
-	ADynamicSplineMeshActor();
-	
-private:
-	#if WITH_EDITOR
-
-	virtual void OnConstruction(const FTransform& Transform) override;
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-
-	#endif
-	
-	#pragma region Init
-	
-	void SetSplineLenght() const;
-
-	#pragma endregion
-
-	#pragma region Update
-
-	/* Flush and reset the spline meshes with the different methods */
-	UFUNCTION() void UpdateSpline();
-
-	/* Destroy all SplineMeshComponent */
-	void FlushSpline();
-
-	#pragma endregion
-
-	#pragma region Composition
-
-	/* Applies a duplication method to compose the spline */
-	void DuplicateMesh();
-
-	/* Applies a extend method to compose the spline */
-	void ExtendMesh();
-
-	/* Get the mesh that makes up the spline */
-	FMeshComposition GetMeshComposition(const int _splinePointIndex = 0) const;
-
-	#pragma endregion
-
-	#pragma region Placement
-
-	/* Add a new mesh to the spline */
-	void AddSplineMesh(const FMeshComposition& _meshComposition, const FSplineMeshValues& _values, const int _index);
-
-	/* Rotate a specific mesh on the spline */
-	void RotateSplineMesh(USplineMeshComponent* _splineMesh, const FSplineMeshValues& _values, const unsigned int _index) const;
-
-	/* */
-	UFUNCTION(CallInEditor, Category = "Spline => Editor") void ClipMeshes();
 
 	#pragma endregion
 
 	#pragma region Rotation
 
+	/*
+	 *  Reset meshRotation values
+	 *  Called when the rotation has changed
+	 */
+	FORCEINLINE void ResetMeshRotationValues()
+	{
+		meshRotation.axisRotation = ROTATE_X;
+		meshRotation.angle = 0.0f;
+		ResetMeshesRotation();
+	}
+		
 	/*
 	 * Reset meshRotation values
 	 * Called when the rotation has changed
@@ -361,19 +365,22 @@ private:
 	#pragma endregion
 
 	#pragma region Ground
-	
-	void SnapSplinePointsOnGround() const;
-	void CreateSplinePointsOnGround();
-	void CreateSplinePointsBetween();
-	void AddSplinePoint(const FVector& _location, ESplinePointType::Type _type = ESplinePointType::Linear);
-	// void AddSplinePoint(const int _index, const FVector& _location, ESplinePointType::Type _type = ESplinePointType::Linear);
 
-	#pragma endregion
-	
-	#pragma region Others
-	
-	bool IsAlreadySplinePointAtLocation(const FVector _location) const;
-	UFUNCTION(CallInEditor, Category = "Spline => Editor", meta = (EditCondition = "composition == EComposition::RANDOM", EditConditionHides)) void RandomizeSpline();
+	/* Snap the spline on the ground */
+	void SnapOnGround();
+
+	/*
+	 * Ground ground at distance along spline
+	 * Update '_splinePoints' consequently
+	 */
+	void CheckGround(TArray<FVector>& _splinePoints, float _distance);
+	void MakeBridge();
+
+#pragma endregion
+
+	#pragma region Bridge
+
+
 
 	#pragma endregion
 };
