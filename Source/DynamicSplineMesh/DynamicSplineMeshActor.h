@@ -35,11 +35,38 @@
 #include "GameFramework/Actor.h"
 #include "DynamicSplineMeshActor.generated.h"
 
+USTRUCT()
+struct FBridge
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, Category = "Bridge values")
+		FVector startLocation = FVector();
+
+	UPROPERTY(VisibleAnywhere, Category = "Bridge values")
+		FVector endLocation = FVector();
+
+	FBridge() { }
+	FBridge(FVector _startLocation, FVector _endLocation)
+	{
+		startLocation = _startLocation;
+		endLocation = _endLocation;
+	}
+
+	FVector ComputeMiddleLocation() const
+	{
+		const float _x = ( startLocation.X + endLocation.X) / 2.0f;
+		const float _y = ( startLocation.Y + endLocation.Y) / 2.0f;
+		const float _z = ( startLocation.Z + endLocation.Z) / 2.0f;
+		return FVector(_x, _y, _z);
+	}
+};
+
 UCLASS()
 class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 {
 	GENERATED_BODY()
-
+	
 	#pragma region Spline
 
 	/* Version of this tool */
@@ -166,33 +193,33 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 		bool snapOnGround = true;
 
 	/* Vertical offset to start the ground check */
-	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "-1000.0", ClampMax = "1000.0", EditCondition = snapOnGround, EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "-1000.0", ClampMax = "1000.0"))
 		float zGroundCheckOffset = 0.0f;
 	
 	/* Depth of the ground check */
-	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "0.0", ClampMax = "1000.0", EditCondition = snapOnGround, EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "0.0", ClampMax = "1000.0"))
 		float checkGroundDepth = 200.0f;
 	
 	/* Ground layer used for the ground check */
-	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (EditCondition = snapOnGround, EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Ground")
 		TArray<TEnumAsByte<EObjectTypeQuery>> groundLayer = TArray<TEnumAsByte<EObjectTypeQuery>>();
 	
 	/* Ground check method */
-	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (EditCondition = snapOnGround, EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Ground")
 		TEnumAsByte<ECheckGroundMethod> checkGroundMethod = TEnumAsByte<ECheckGroundMethod>();
 	
 	/*
 	 * Number of check on the spline
 	 * Usable only in the 'Points' check ground method
 	 */
-	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "0", ClampMax = "1000", EditCondition = "snapOnGround && checkGroundMethod == ECheckGroundMethod::POINTS", EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "0", ClampMax = "1000", EditCondition = "checkGroundMethod == ECheckGroundMethod::POINTS", EditConditionHides))
 		int checkGroundPointsCount = 10;
 	
 	/*
 	 * Gap between the ground checks
 	 * Usable only in the 'SPACING' check ground method
 	 */
-	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "1.0", ClampMax = "10000.0", EditCondition = "snapOnGround && checkGroundMethod == ECheckGroundMethod::SPACING", EditConditionHides))
+	UPROPERTY(EditAnywhere, Category = "Spline | Ground", meta = (ClampMin = "1.0", ClampMax = "10000.0", EditCondition = "checkGroundMethod == ECheckGroundMethod::SPACING", EditConditionHides))
 		float checkGroundSpacing = 500.0f;
 	
 	#pragma endregion
@@ -205,39 +232,13 @@ class DYNAMICSPLINEMESH_API ADynamicSplineMeshActor : public AActor
 	UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
 		bool reverseTension = false;
 	
-	UPROPERTY(EditAnywhere, Category = "Spline | Bridge", meta = (ClampMin = "-1000.0", ClampMax = "1000.0"))
+	UPROPERTY(EditAnywhere, Category = "Spline | Bridge", meta = (ClampMin = "0.0", ClampMax = "1000.0"))
 		float tension = 0.0f;
 
+	UPROPERTY(EditAnywhere, Category = "Spline | Bridge", meta = (ClampMin = "0.0", ClampMax = "1000.0"))
+		float bridgeDepth = 0.0f;
+
 	#pragma endregion
-	
-	/* #pragma region BridgeMode
-	//
-	// UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
-	// 	bool useBridgeMode = false;
-	//
-	// UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
-	// 	bool reverseCurve = false;
-	//
-	// UPROPERTY(EditAnywhere, Category = "Spline | Bridge", meta = (ClampMin = "-1000.0", ClampMax = "1000.0"))
-	// 	float tension = 0.0f;
-	//
-	// UPROPERTY(EditAnywhere, Category = "Spline | Bridge")
-	// 	TEnumAsByte<ESurfacePriority> surfacePriority = TEnumAsByte<ESurfacePriority>();
-	//
-	// #pragma endregion */
-	
-	/* #pragma region WindingMode
-	//
-	// UPROPERTY(EditAnywhere, Category = "Spline | Winding")
-	// 	bool useWindingMode = false;
-	//
-	// UPROPERTY(EditAnywhere, Category = "Spline | Winding", meta = (ClampMin = "0", ClampMax = "100"))
-	// 	unsigned int turnsCount = 5;
-	// 	
-	// UPROPERTY(EditAnywhere, Category = "Spline | Winding", meta = (ClampMin = "0.0", ClampMax = "10000.0"))
-	// 	float windingGap = 5.0f;
-	//
-	// #pragma endregion */
 	
 public:	
 	ADynamicSplineMeshActor();
@@ -373,7 +374,7 @@ private:
 	 * Ground ground at distance along spline
 	 * Update '_splinePoints' consequently
 	 */
-	void CheckGround(TArray<FVector>& _splinePoints, float _distance);
+	void CheckGround(TArray<FVector>& _splinePoints, float _distance, float _depth);
 	void MakeBridge();
 
 #pragma endregion

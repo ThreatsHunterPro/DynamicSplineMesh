@@ -93,6 +93,9 @@ void ADynamicSplineMeshActor::PostEditChangeProperty(FPropertyChangedEvent& Prop
 
 void ADynamicSplineMeshActor::ResetSpline()
 {
+	// Flush all debugs
+	FlushDebug();
+	
 	// Clear the spline points on the spline
 	SetSplineLenght(150.0f);
 
@@ -101,6 +104,9 @@ void ADynamicSplineMeshActor::ResetSpline()
 
 	// Stop ground checking
 	snapOnGround = false;
+
+	// Stop bridge mode
+	isBridge = false;
 
 	// Update the spline
 	UpdateSpline();
@@ -133,6 +139,9 @@ void ADynamicSplineMeshActor::UpdateSpline()
 
 	// Snap the spline on the ground
 	SnapOnGround();
+
+	// Enable bridge mode
+	MakeBridge();
 	
 	// Select the method associated with the placement method
 	switch (placementMethod)
@@ -518,17 +527,17 @@ void ADynamicSplineMeshActor::SnapOnGround()
 
 		for (int _splinePointIndex = 0; _splinePointIndex <= _pointsCount; _splinePointIndex++)
 		{
-			CheckGround(_splinePoints, _splinePointIndex * _gap);
+			CheckGround(_splinePoints, _splinePointIndex * _gap, checkGroundDepth);
 		}
 	}
 
 	else
 	{
 		float _distance = 0.0f;
-		while (_distance + checkGroundSpacing <= lenght)
+		while (_distance <= lenght)
 		{
+			CheckGround(_splinePoints, _distance, checkGroundDepth);
 			_distance += checkGroundSpacing;
-			CheckGround(_splinePoints, _distance);
 		}
 	}
 
@@ -541,12 +550,12 @@ void ADynamicSplineMeshActor::SnapOnGround()
 		spline->SetSplinePointType(_splinePointIndex, splinePointType);
 	}
 }
-void ADynamicSplineMeshActor::CheckGround(TArray<FVector>& _splinePoints, float _distance)
+void ADynamicSplineMeshActor::CheckGround(TArray<FVector>& _splinePoints, float _distance, float _depth)
 {
 	FHitResult _hitResult = FHitResult();
 	const FVector& _splinePointLocation = spline->GetWorldLocationAtDistanceAlongSpline(_distance);
 	const FVector& _startLocation = _splinePointLocation + FVector::UpVector * zGroundCheckOffset;
-	const FVector& _endLocation = _startLocation + FVector::DownVector * checkGroundDepth;
+	const FVector& _endLocation = _startLocation + FVector::DownVector * _depth;
 	const bool _hasHit = UKismetSystemLibrary::LineTraceSingleForObjects(GetWorld(), _startLocation, _endLocation, groundLayer, false, TArray<AActor*>(), EDrawDebugTrace::None, _hitResult, true);
 
 	if (_hasHit)
@@ -561,44 +570,56 @@ void ADynamicSplineMeshActor::CheckGround(TArray<FVector>& _splinePoints, float 
 
 void ADynamicSplineMeshActor::MakeBridge()
 {
+	if (!isBridge) return;
+	
 	const int _pointsCount = checkGroundPointsCount;
 	const float _gap = lenght / _pointsCount;
 	TArray<FVector> _splinePoints = TArray<FVector>();
 	
 	for (int _splinePointIndex = 0; _splinePointIndex <= _pointsCount; _splinePointIndex++)
 	{
-		CheckGround(_splinePoints, _splinePointIndex * _gap);
+		CheckGround(_splinePoints, _splinePointIndex * _gap, bridgeDepth);
 	}
 
-	bool _bridgeStarted = false;
 	const int _splinePointsCount = _splinePoints.Num();
-	for	(int _splinePointIndex = 0; _splinePointIndex < _splinePointsCount - 1; _splinePointIndex++)
+	FVector _previousSplinePoint = FVector();
+	TArray<FBridge> _bridges = TArray<FBridge>();
+	FVector _startLocation = FVector();
+	bool _hasStarted = false;
+	
+	for	(int _splinePointIndex = 0; _splinePointIndex < _splinePointsCount; _splinePointIndex++)
 	{
 		const FVector& _currentSplinePoint = _splinePoints[_splinePointIndex];
-		const FVector& _nextSplinePoint = _splinePoints[_splinePointIndex + 1];
-		
-		// dernier point snap au sol
-		if (!_bridgeStarted && _nextSplinePoint.Z < _currentSplinePoint.Z)
+
+		if (_splinePointIndex >= 1 && _currentSplinePoint.Z != _previousSplinePoint.Z)
 		{
-			_bridgeStarted = true;
+			if (!_hasStarted)
+			{
+				_startLocation = FVector(_currentSplinePoint.X - _gap, _currentSplinePoint.Y, _previousSplinePoint.Z);
+				_hasStarted = true;
+			}
+			
+			else
+			{
+				_bridges.Add(FBridge(_startLocation, _currentSplinePoint));
+				_hasStarted = false;
+			}
 		}
 
-		// premier point snap au sol
-		else if (_bridgeStarted && _nextSplinePoint.Z > _currentSplinePoint.Z)
-		{
-			
-		}
+		_previousSplinePoint = _currentSplinePoint;
 	}
-	
-	// distance entre les 2
-	
-	// _middle = point entre les 2
-	
-	const float _finalTension = reverseTension ? tension : -tension;
-	
-	// _finalLocation = _middle + up * _finalTension
-	
-	// addsplinepoint(_finalLocation, world);
+
+	const int _bridgesCount = _bridges.Num();
+	for	(int _bridgeIndex = 0; _bridgeIndex < _bridgesCount; _bridgeIndex++)
+	{
+		const FBridge& _bridge = _bridges[_bridgeIndex];
+		const float _finalTension = reverseTension ? -tension : tension;
+		const FVector& _middleLocation = _bridge.ComputeMiddleLocation() + FVector::UpVector * _finalTension;
+		const int _inputKey = spline->FindInputKeyClosestToWorldLocation(_middleLocation) + 1;
+		
+		spline->AddSplinePointAtIndex(_middleLocation, _inputKey, ESplineCoordinateSpace::World);
+		spline->SetSplinePointType(_inputKey, ESplinePointType::Curve);
+	}
 }
 
 #pragma endregion
